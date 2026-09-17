@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.stockidle.game.ui.theme.AppShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -123,7 +123,7 @@ fun OfflineReportOverlay(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(AppShape.Card)
                     .background(pal.surface)
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -148,7 +148,7 @@ fun OfflineReportOverlay(
                             Modifier
                                 .width(6.dp)
                                 .height(28.dp)
-                                .clip(RoundedCornerShape(3.dp))
+                                .clip(AppShape.Mini)
                                 .background(pal.gold.copy(alpha = if (itemProgress.value > i) 1f else 0.25f)),
                         )
                         Spacer(Modifier.width(10.dp))
@@ -205,7 +205,7 @@ fun OfflineReportOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = AppShape.Button,
                 ) {
                     Text("收 下", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }

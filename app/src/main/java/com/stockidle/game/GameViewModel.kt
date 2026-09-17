@@ -23,6 +23,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun buy(stockId: String, fraction: Double) = engine.buy(stockId, fraction)
     fun sell(stockId: String, fraction: Double) = engine.sell(stockId, fraction)
+    fun placeOrder(stockId: String, buy: Boolean, limitPrice: Double, fraction: Double) =
+        engine.placeOrder(stockId, buy, limitPrice, fraction)
+    fun cancelOrder(orderId: Long) = engine.cancelOrder(orderId)
     fun toggleFavorite(stockId: String) = engine.toggleFavorite(stockId)
     fun collectDividends() = engine.collectDividends()
     fun buyUpgrade(id: String) = engine.buyUpgrade(id)
@@ -32,5 +35,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun setThemeMode(mode: Int) = engine.setThemeMode(mode)
     fun setSound(on: Boolean) = engine.setSound(on)
     fun setVibrate(on: Boolean) = engine.setVibrate(on)
+    fun setPace(pace: Int) = engine.setPace(pace)
+    fun setTutorialDone() = engine.setTutorialDone()
     fun resetAll() = engine.resetAll()
 }

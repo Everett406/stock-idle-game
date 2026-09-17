@@ -7,11 +7,19 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -35,18 +43,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stockidle.game.GameViewModel
-import com.stockidle.game.game.ActiveEvent
 import com.stockidle.game.game.GameEvent
+import com.stockidle.game.game.MarketPace
 import com.stockidle.game.game.OfflineReport
 import com.stockidle.game.game.ThemeMode
 import com.stockidle.game.sound.SoundManager
+import com.stockidle.game.ui.components.AppIcons
 import com.stockidle.game.ui.components.BreakingBanner
 import com.stockidle.game.ui.components.CoinRain
 import com.stockidle.game.ui.components.FloatingAmount
@@ -54,16 +63,18 @@ import com.stockidle.game.ui.components.MoodBackground
 import com.stockidle.game.ui.components.OfflineReportOverlay
 import com.stockidle.game.ui.components.PrestigeOverlay
 import com.stockidle.game.ui.components.TradeBurst
+import com.stockidle.game.ui.components.TutorialOverlay
 import com.stockidle.game.ui.components.UnlockOverlay
 import com.stockidle.game.ui.screens.AssetsScreen
 import com.stockidle.game.ui.screens.DetailScreen
 import com.stockidle.game.ui.screens.GrowthScreen
 import com.stockidle.game.ui.screens.MarketScreen
+import com.stockidle.game.ui.theme.AppShape
 import com.stockidle.game.ui.theme.LocalPal
 import com.stockidle.game.util.Fmt
 
 /**
- * 应用根：底部三 Tab + 详情覆盖层 + 全部特效覆盖层 + 事件消费中枢。
+ * 应用根 v0.2：硬朗终端风顶栏（含状态栏适配）+ 底部矢量图标 Tab + 特效层 + 新手引导。
  */
 @Composable
 fun AppRoot(vm: GameViewModel) {
@@ -77,6 +88,17 @@ fun AppRoot(vm: GameViewModel) {
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var confirmPrestige by remember { mutableStateOf(false) }
+
+    // 新手引导（首次启动自动弹出；完成后可在设置重看）
+    var tutorialVisible by remember { mutableStateOf(false) }
+    var tutorialStep by rememberSaveable { mutableIntStateOf(0) }
+    var tutorialStarted by remember { mutableStateOf(false) }
+    LaunchedEffect(state.tutorialDone) {
+        if (!state.tutorialDone && !tutorialStarted) {
+            tutorialStarted = true
+            tutorialVisible = true
+        }
+    }
 
     // 特效触发器（自增计数）
     var newsVisible by remember { mutableStateOf(false) }
@@ -139,7 +161,8 @@ fun AppRoot(vm: GameViewModel) {
                 is GameEvent.EventHint -> {
                     sound.play(SoundManager.Sfx.CLICK, 0.6f)
                     snackbarHostState.showSnackbar(
-                        "📡 内幕雷达：" + ev.stockName + (if (ev.good) " 即将有利好" else " 即将有利空") + "（${ev.leadSeconds}秒后）"
+                        "内幕雷达：" + ev.stockName + (if (ev.good) " 即将有利好" else " 即将有利空") +
+                            "（${ev.leadSeconds}秒后）"
                     )
                 }
                 is GameEvent.StockUnlocked -> {
@@ -174,6 +197,28 @@ fun AppRoot(vm: GameViewModel) {
                     sound.play(SoundManager.Sfx.COIN)
                     snackbarHostState.showSnackbar("任务完成：${ev.title}，奖励 " + Fmt.money(ev.reward))
                 }
+                is GameEvent.OrderFilled -> {
+                    sound.play(SoundManager.Sfx.TRADE)
+                    vibrate(120)
+                    snackbarHostState.showSnackbar(
+                        "委托成交：" + (if (ev.buy) "买入 " else "卖出 ") + ev.symbol + " @ " + Fmt.price(ev.price)
+                    )
+                }
+                is GameEvent.OrderPlaced -> {
+                    if (ev.ok) sound.play(SoundManager.Sfx.CLICK) else sound.play(SoundManager.Sfx.ERROR)
+                    snackbarHostState.showSnackbar(ev.msg)
+                }
+                is GameEvent.AchievementUnlocked -> {
+                    collectTrigger++
+                    sound.play(SoundManager.Sfx.UNLOCK)
+                    snackbarHostState.showSnackbar("成就达成「${ev.name}」，奖励 " + Fmt.money(ev.reward))
+                }
+                is GameEvent.TutorialDone -> {
+                    if (ev.rewarded) {
+                        collectTrigger++
+                        snackbarHostState.showSnackbar("引导完成，启动补贴 ¥3,000 已入账")
+                    }
+                }
             }
         }
     }
@@ -185,38 +230,79 @@ fun AppRoot(vm: GameViewModel) {
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                androidx.compose.foundation.layout.Row(
+                // v0.2 修复：statusBarsPadding 防止内容被系统状态栏遮挡
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                        .background(pal.surface)
+                        .statusBarsPadding(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("股海拾金", color = pal.gold, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("  单机放置 · 模拟市场", color = pal.textDim, fontSize = 10.sp)
-                    Box(Modifier.weight(1f))
-                    Text(
-                        "⚙️",
-                        fontSize = 17.sp,
+                    // 金色标识块（硬朗方形）
+                    Box(
+                        Modifier
+                            .padding(start = 14.dp, top = 8.dp, bottom = 8.dp)
+                            .width(4.dp)
+                            .height(22.dp)
+                            .background(pal.gold),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.padding(vertical = 8.dp)) {
+                        Text("股海拾金", color = pal.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("STOCK IDLE · 单机模拟市场", color = pal.textDim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    // 大盘指数速览
+                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(vertical = 6.dp)) {
+                        Text("大盘指数", color = pal.textDim, fontSize = 9.sp)
+                        Text(
+                            String.format(java.util.Locale.CHINA, "%.1f", state.indexValue),
+                            color = if (state.marketIndex > 0) pal.up else if (state.marketIndex < 0) pal.down else pal.text,
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    AppIcons.Icon(
+                        kind = "gear",
+                        color = pal.textDim,
+                        size = 20.dp,
                         modifier = Modifier
                             .clickable { showSettings = true }
-                            .padding(6.dp),
+                            .padding(10.dp),
                     )
                 }
             },
             bottomBar = {
-                NavigationBar(containerColor = pal.surface) {
-                    val tabs = listOf("行情", "资产", "成长")
-                    tabs.forEachIndexed { i, label ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Text(listOf("📈", "💼", "🚀")[i], fontSize = 18.sp) },
-                            label = { Text(label, fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedTextColor = pal.gold,
-                                indicatorColor = pal.goldDim,
-                            ),
-                        )
+                Column(Modifier.background(pal.surface)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(pal.border),
+                    )
+                    NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
+                        val tabs = listOf("行情", "资产", "成长")
+                        val icons = listOf("chart", "wallet", "growth")
+                        tabs.forEachIndexed { i, label ->
+                            NavigationBarItem(
+                                selected = tab == i,
+                                onClick = { tab = i },
+                                icon = {
+                                    AppIcons.Icon(
+                                        kind = icons[i],
+                                        color = if (tab == i) pal.gold else pal.textDim,
+                                        size = 22.dp,
+                                    )
+                                },
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedTextColor = pal.gold,
+                                    indicatorColor = pal.goldDim,
+                                ),
+                            )
+                        }
                     }
                 }
             },
@@ -233,6 +319,7 @@ fun AppRoot(vm: GameViewModel) {
                             state = state,
                             onCollectDividends = vm::collectDividends,
                             onOpenDetail = { detailId = it },
+                            onCancelOrder = vm::cancelOrder,
                         )
                         else -> GrowthScreen(
                             state = state,
@@ -245,8 +332,12 @@ fun AppRoot(vm: GameViewModel) {
             }
         }
 
-        // 突发新闻横幅（使用引擎内的真实事件数据）
-        Box(Modifier.align(Alignment.TopCenter)) {
+        // 突发新闻横幅（顶部浮层，避开状态栏）
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding(),
+        ) {
             BreakingBanner(
                 event = if (newsVisible) state.activeEvent else null,
                 onDismiss = { newsVisible = false },
@@ -260,7 +351,7 @@ fun AppRoot(vm: GameViewModel) {
             trigger = floatTrigger,
             text = floatText,
             color = pal.gold,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 110.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 120.dp),
         )
 
         // 详情页（覆盖整屏，含底栏；带滑入滑出动画）
@@ -279,6 +370,7 @@ fun AppRoot(vm: GameViewModel) {
                     onBack = { detailId = null },
                     onBuy = vm::buy,
                     onSell = vm::sell,
+                    onPlaceOrder = vm::placeOrder,
                 )
             }
         }
@@ -309,6 +401,27 @@ fun AppRoot(vm: GameViewModel) {
             newLevel = prestigeLevel,
             modifier = Modifier.fillMaxSize(),
         )
+
+        // 新手引导（最顶层）
+        TutorialOverlay(
+            visible = tutorialVisible && !state.tutorialDone,
+            stepIndex = tutorialStep,
+            onNext = {
+                val jump = com.stockidle.game.ui.components.TutorialSteps.steps.getOrNull(tutorialStep)?.jumpTab
+                if (jump != null) tab = jump
+                if (tutorialStep >= com.stockidle.game.ui.components.TutorialSteps.steps.size - 1) {
+                    tutorialVisible = false
+                    vm.setTutorialDone()
+                } else {
+                    tutorialStep++
+                }
+            },
+            onSkip = {
+                tutorialVisible = false
+                vm.setTutorialDone()
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 
     // 设置弹窗
@@ -317,10 +430,17 @@ fun AppRoot(vm: GameViewModel) {
             themeMode = state.themeMode,
             soundOn = state.soundOn,
             vibrateOn = state.vibrateOn,
+            pace = state.pace,
             version = state.versionName,
             onTheme = vm::setThemeMode,
             onSound = vm::setSound,
             onVibrate = vm::setVibrate,
+            onPace = vm::setPace,
+            onRetakeTutorial = {
+                showSettings = false
+                tutorialStep = 0
+                tutorialVisible = true
+            },
             onReset = {
                 vm.resetAll()
                 showSettings = false
@@ -336,7 +456,7 @@ fun AppRoot(vm: GameViewModel) {
             title = { Text("确认转生？") },
             text = {
                 Text(
-                    "转生将清空现金、持仓与待领分红，股价重置。\n" +
+                    "转生将清空现金、持仓、委托与待领分红，股价重置。\n" +
                         "你将获得：经理 Lv." + (state.managerLevel + 1) + "，永久分红 +30%，初始资金提升至 " +
                         Fmt.money(10000.0 + 6000.0 * (state.managerLevel + 1)) + "。"
                 )
@@ -359,10 +479,13 @@ private fun SettingsDialog(
     themeMode: Int,
     soundOn: Boolean,
     vibrateOn: Boolean,
+    pace: Int,
     version: String,
     onTheme: (Int) -> Unit,
     onSound: (Boolean) -> Unit,
     onVibrate: (Boolean) -> Unit,
+    onPace: (Int) -> Unit,
+    onRetakeTutorial: () -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -372,19 +495,19 @@ private fun SettingsDialog(
         containerColor = pal.surface,
         title = { Text("设置", color = pal.text, fontWeight = FontWeight.Bold) },
         text = {
-            androidx.compose.foundation.layout.Column {
+            Column {
                 Text("主题", color = pal.textDim, fontSize = 12.sp)
-                androidx.compose.foundation.layout.Row(
+                Row(
                     modifier = Modifier.padding(vertical = 6.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     val modes = listOf("跟随系统" to ThemeMode.SYSTEM, "亮色" to ThemeMode.LIGHT, "暗色" to ThemeMode.DARK)
                     modes.forEach { (label, m) ->
                         val selected = themeMode == m
                         Box(
                             Modifier
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                                 .background(if (selected) pal.gold else pal.surfaceHigh)
+                                .border(1.dp, if (selected) pal.gold else pal.border, AppShape.Card)
                                 .clickable { onTheme(m) }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         ) {
@@ -397,16 +520,62 @@ private fun SettingsDialog(
                         }
                     }
                 }
+
+                Spacer(Modifier.height(6.dp))
+                Text("市场活跃度", color = pal.textDim, fontSize = 12.sp)
+                Text(
+                    "影响股价波动幅度与新闻频率：悠闲适合养老收分红，疾速适合短线做差价",
+                    color = pal.textDim,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                )
+                Row(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val paces = listOf("悠闲" to MarketPace.CALM, "标准" to MarketPace.STANDARD, "疾速" to MarketPace.RAPID)
+                    paces.forEach { (label, p) ->
+                        val selected = pace == p
+                        Box(
+                            Modifier
+                                .background(if (selected) pal.gold else pal.surfaceHigh)
+                                .border(1.dp, if (selected) pal.gold else pal.border, AppShape.Card)
+                                .clickable { onPace(p) }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                label,
+                                color = if (selected) Color(0xFF2B1D00) else pal.text,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+
                 SettingSwitch("音效", soundOn, onSound)
                 SettingSwitch("震动反馈", vibrateOn, onVibrate)
-                androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 4.dp))
+
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onRetakeTutorial() }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AppIcons.Icon(kind = "book", color = pal.teal, size = 16.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("重看新手引导", color = pal.teal, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.padding(top = 2.dp))
                 Text(
                     "股海拾金 v$version · 单机游戏，存档保存在本机",
                     color = pal.textDim,
                     fontSize = 11.sp,
                 )
                 Text(
-                    "⚠️ 重置存档",
+                    "重置存档（不可恢复）",
                     color = pal.up,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -425,7 +594,7 @@ private fun SettingsDialog(
 @Composable
 private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val pal = LocalPal.current
-    androidx.compose.foundation.layout.Row(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),

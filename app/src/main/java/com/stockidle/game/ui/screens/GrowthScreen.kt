@@ -3,6 +3,7 @@ package com.stockidle.game.ui.screens
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,28 +17,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stockidle.game.game.GameState
+import com.stockidle.game.ui.components.AppIcons
+import com.stockidle.game.ui.theme.AppShape
 import com.stockidle.game.ui.theme.LocalPal
 import com.stockidle.game.util.Fmt
 
 /**
- * 成长页：限时事件 / 每日任务 / 升级 / 转生。
+ * 成长页 v0.2：限时事件 / 每日任务 / 永久升级（7 项）/ 成就墙 / 转生。
  */
 @Composable
 fun GrowthScreen(
@@ -58,12 +61,12 @@ fun GrowthScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
                     .background(if (state.windowActive) pal.goldDim else pal.surface)
+                    .border(1.dp, if (state.windowActive) pal.gold else pal.border, AppShape.Card)
                     .padding(14.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⏱", fontSize = 16.sp)
+                    AppIcons.Icon(kind = "clock", color = pal.gold, size = 16.dp)
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "限时事件 · 波动翻倍时段",
@@ -110,10 +113,15 @@ fun GrowthScreen(
         }
         itemsUpgrades(state, onBuyUpgrade)
 
+        // 成就
+        item {
+            AchievementCard(state)
+        }
+
         // 转生
         item {
             PrestigeCard(state, onPrestige)
-            Spacer(Modifier.height(90.dp))
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
@@ -175,51 +183,41 @@ private fun TaskRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
             .background(pal.surface)
+            .border(1.dp, if (done && !claimed) pal.gold else pal.border, AppShape.Card)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = pal.text, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text(
-                    "奖励 " + Fmt.money(reward),
-                    color = pal.gold,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-            Spacer(Modifier.height(6.dp))
+            Text(title, color = pal.text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
             LinearProgressIndicator(
                 progress = { animProgress },
                 color = if (done) pal.gold else pal.teal,
                 trackColor = pal.surfaceHigh,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                "${(progress * 100).toInt()}%",
-                color = pal.textDim,
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
+                    .height(4.dp),
             )
         }
         Spacer(Modifier.width(10.dp))
-        Button(
-            onClick = onClaim,
-            enabled = done && !claimed,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = pal.gold,
-                contentColor = Color(0xFF2B1D00),
-            ),
-            shape = RoundedCornerShape(9.dp),
-            modifier = Modifier.height(34.dp),
-        ) {
-            Text(if (claimed) "已领取" else "领取", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        if (claimed) {
+            Text("已领取", color = pal.textDim, fontSize = 12.sp)
+        } else {
+            Button(
+                onClick = onClaim,
+                enabled = done,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = pal.gold,
+                    contentColor = Color(0xFF2B1D00),
+                    disabledContainerColor = pal.surfaceHigh,
+                    disabledContentColor = pal.textDim,
+                ),
+                shape = AppShape.Button,
+                modifier = Modifier.height(34.dp),
+            ) {
+                Text("领 " + Fmt.money(reward), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -240,18 +238,12 @@ private fun UpgradeRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
             .background(pal.surface)
+            .border(1.dp, pal.border, AppShape.Card)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(pal.surfaceHigh),
-            contentAlignment = Alignment.Center,
-        ) { Text(icon, fontSize = 18.sp) }
+        AppIcons.Icon(kind = icon, color = pal.gold, size = 26.dp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,7 +260,7 @@ private fun UpgradeRow(
                 containerColor = if (maxed) pal.surfaceHigh else pal.gold,
                 contentColor = if (maxed) pal.textDim else Color(0xFF2B1D00),
             ),
-            shape = RoundedCornerShape(9.dp),
+            shape = AppShape.Button,
             modifier = Modifier.height(36.dp),
         ) {
             Text(
@@ -280,6 +272,100 @@ private fun UpgradeRow(
     }
 }
 
+// ---------------------------------------------------------------- 成就
+@Composable
+private fun AchievementCard(state: GameState) {
+    val pal = LocalPal.current
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(pal.surface)
+            .border(1.dp, pal.border, AppShape.Card)
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppIcons.Icon(kind = "trophy", color = pal.gold, size = 18.dp)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "成就墙",
+                color = pal.text,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${state.achievementUnlockedCount}/${state.achievements.size}",
+                color = pal.gold,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable { expanded = !expanded }
+                    .padding(4.dp),
+            )
+            Text(
+                if (expanded) "收起" else "展开",
+                color = pal.teal,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        val shown = if (expanded) state.achievements else state.achievements.filter { it.unlocked }
+        if (shown.isEmpty()) {
+            Text(
+                "还没有成就达成，完成首笔交易即达成「开门红」。",
+                color = pal.textDim,
+                fontSize = 11.sp,
+            )
+        }
+        shown.forEach { a ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIcons.Icon(
+                    kind = "trophy",
+                    color = if (a.unlocked) pal.gold else pal.textDim.copy(alpha = 0.5f),
+                    size = 14.dp,
+                    filled = a.unlocked,
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        a.def.name,
+                        color = if (a.unlocked) pal.text else pal.textDim,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(a.def.desc, color = pal.textDim, fontSize = 10.sp)
+                }
+                Text(
+                    "+" + Fmt.money(a.def.reward),
+                    color = if (a.unlocked) pal.gold else pal.textDim.copy(alpha = 0.6f),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+        }
+        if (!expanded && state.achievements.size > state.achievementUnlockedCount) {
+            Text(
+                "还有 ${state.achievements.size - state.achievementUnlockedCount} 项成就等待达成",
+                color = pal.textDim,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- 转生
 @Composable
 private fun PrestigeCard(state: GameState, onPrestige: () -> Unit) {
     val pal = LocalPal.current
@@ -290,20 +376,21 @@ private fun PrestigeCard(state: GameState, onPrestige: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
             .background(
                 androidx.compose.ui.graphics.Brush.verticalGradient(
                     listOf(pal.goldDim, pal.surface),
                 )
             )
+            .border(1.5.dp, pal.gold, AppShape.Card)
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🔄 转生", color = pal.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            AppIcons.Icon(kind = "cycle", color = pal.gold, size = 18.dp)
+            Spacer(Modifier.width(6.dp))
+            Text("转生", color = pal.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box(
                 Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(pal.gold.copy(alpha = 0.2f))
+                    .background(pal.gold.copy(alpha = 0.2f), AppShape.Mini)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             ) {
                 Text("经理 Lv." + state.managerLevel, color = pal.gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -322,8 +409,7 @@ private fun PrestigeCard(state: GameState, onPrestige: () -> Unit) {
             trackColor = pal.surfaceHigh,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp)),
+                .height(6.dp),
         )
         Spacer(Modifier.height(4.dp))
         Row {
@@ -340,7 +426,7 @@ private fun PrestigeCard(state: GameState, onPrestige: () -> Unit) {
             onClick = onPrestige,
             enabled = state.canPrestige,
             colors = ButtonDefaults.buttonColors(containerColor = pal.gold, contentColor = Color(0xFF2B1D00)),
-            shape = RoundedCornerShape(12.dp),
+            shape = AppShape.Button,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(46.dp),

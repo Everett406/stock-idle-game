@@ -31,8 +31,10 @@ data class StockDef(
 class StockState(val def: StockDef) {
     var price: Double = def.basePrice
     var prevPrice: Double = def.basePrice
-    var sessionOpen: Double = def.basePrice
-    val history = ArrayDeque<Double>()   // 最多 720 个点（约 12 分钟）
+    var sessionOpen: Double = def.basePrice   // 分时涨跌基准
+    var dayOpen: Double = def.basePrice       // 涨跌停基准（每日重置）
+    val history = ArrayDeque<Double>()        // 最多 720 个点（约 12 分钟分时）
+    val volumes = ArrayDeque<Double>()        // 对应每秒成交量（虚拟手数）
     var unlocked: Boolean = false
     var unlockedAnnounced: Boolean = false
 
@@ -44,16 +46,31 @@ class StockState(val def: StockDef) {
     var eventTitle: String = ""
     var eventBody: String = ""
 
+    /** 涨跌停状态：1 涨停 / -1 跌停 / 0 正常 */
+    var limitState: Int = 0
+
+    val limitUp: Double get() = (dayOpen * LIMIT_PCT).round4()
+    val limitDown: Double get() = (dayOpen * (2.0 - LIMIT_PCT)).round4()
+
     val tickChange: Double get() = price - prevPrice
     val sessionChangePct: Double
         get() = if (sessionOpen > 1e-9) (price / sessionOpen - 1.0) * 100.0 else 0.0
+    val dayChangePct: Double
+        get() = if (dayOpen > 1e-9) (price / dayOpen - 1.0) * 100.0 else 0.0
 
-    fun pushHistory(p: Double) {
+    fun pushHistory(p: Double, v: Double) {
         history.addLast(p)
+        volumes.addLast(v)
         while (history.size > HISTORY_MAX) history.removeFirst()
+        while (volumes.size > HISTORY_MAX) volumes.removeFirst()
     }
 
-    companion object { const val HISTORY_MAX = 720 }
+    private fun Double.round4(): Double = Math.round(this * 10000.0) / 10000.0
+
+    companion object {
+        const val HISTORY_MAX = 720
+        const val LIMIT_PCT = 1.10   // ±10% 涨跌停
+    }
 }
 
 /** 持仓（ shares + 成本总额，成本含买入手续费，用于计算盈亏） */
@@ -64,7 +81,33 @@ data class HoldingState(
     val avgCost: Double get() = if (shares > 1e-9) costBasis / shares else 0.0
 }
 
-/** 升级项定义 */
+/** 限价委托单（挂单冻结资金/持仓，成交或撤单释放） */
+data class PendingOrder(
+    val id: Long,
+    val stockId: String,
+    val buy: Boolean,
+    val limitPrice: Double,
+    val fraction: Double,     // 挂单时选定的比例（买:当时现金比例；卖:当时持仓比例）
+    var frozenCash: Double,   // 买单冻结现金
+    var frozenShares: Double, // 卖单冻结股数
+    val createdAtMs: Long,
+)
+
+/** 委托单 UI 快照 */
+data class OrderUi(
+    val id: Long,
+    val stockId: String,
+    val symbol: String,
+    val name: String,
+    val buy: Boolean,
+    val limitPrice: Double,
+    val fraction: Double,
+    val currentPrice: Double,
+    val frozenCash: Double,
+    val frozenShares: Double,
+)
+
+/** 升级项定义（icon 为 AppIcons 的 key，全应用禁用 emoji） */
 data class UpgradeDef(
     val id: String,
     val name: String,
@@ -104,6 +147,7 @@ data class ActiveEvent(
     val untilMs: Long,
     val title: String,
     val body: String,
+    val sector: String? = null,   // 板块事件时非空
 )
 
 /** 内幕提示（新闻推送升级解锁后，事件发生前给出） */
@@ -135,6 +179,21 @@ sealed interface GameEvent {
     data class PrestigeDone(val oldTotal: Double, val newLevel: Int, val startCapital: Double) : GameEvent
     data class UpgradeBought(val id: String, val newLevel: Int) : GameEvent
     data class TaskClaimed(val title: String, val reward: Double) : GameEvent
+
+    /** 限价单成交 */
+    data class OrderFilled(
+        val stockId: String, val symbol: String, val buy: Boolean,
+        val price: Double, val amount: Double,
+    ) : GameEvent
+
+    /** 委托单操作反馈 */
+    data class OrderPlaced(val ok: Boolean, val msg: String) : GameEvent
+
+    /** 成就达成 */
+    data class AchievementUnlocked(val name: String, val reward: Double) : GameEvent
+
+    /** 新手引导完成（含一次性启动补贴） */
+    data class TutorialDone(val rewarded: Boolean) : GameEvent
 }
 
 /** 主题模式：跟随系统 / 亮色 / 暗色 */
@@ -142,4 +201,29 @@ object ThemeMode {
     const val SYSTEM = 0
     const val LIGHT = 1
     const val DARK = 2
+}
+
+/** 市场活跃度（价格波动与事件频率的全局节奏，可在设置中调整） */
+object MarketPace {
+    const val CALM = 0      // 悠闲：波动 ×0.7，事件更少
+    const val STANDARD = 1  // 标准：原版节奏
+    const val RAPID = 2     // 疾速：波动 ×1.5，事件更密
+
+    fun volFactor(pace: Int): Double = when (pace) {
+        CALM -> 0.7
+        RAPID -> 1.5
+        else -> 1.0
+    }
+
+    fun intervalFactor(pace: Int): Double = when (pace) {
+        CALM -> 1.5
+        RAPID -> 0.6
+        else -> 1.0
+    }
+
+    fun label(pace: Int): String = when (pace) {
+        CALM -> "悠闲"
+        RAPID -> "疾速"
+        else -> "标准"
+    }
 }

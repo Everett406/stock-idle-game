@@ -22,18 +22,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -42,15 +41,17 @@ import androidx.compose.ui.unit.sp
 import com.stockidle.game.game.GameState
 import com.stockidle.game.game.StockUi
 import com.stockidle.game.ui.components.AnimatedNumber
+import com.stockidle.game.ui.components.AppIcons
 import com.stockidle.game.ui.components.ChangeText
 import com.stockidle.game.ui.components.Sparkline
 import com.stockidle.game.ui.components.TickerTape
+import com.stockidle.game.ui.theme.AppShape
 import com.stockidle.game.ui.theme.LocalPal
 import com.stockidle.game.util.Fmt
 import kotlin.math.abs
 
 /**
- * 行情页：顶部滚动行情条 + 市场概览 + 股票卡片列表（含未解锁占位）。
+ * 行情页 v0.2：滚动行情条 + 大盘指数卡 + 排序筛选 + 股票列表（直角硬朗卡片）。
  */
 @Composable
 fun MarketScreen(
@@ -59,40 +60,63 @@ fun MarketScreen(
     onToggleFavorite: (String) -> Unit,
 ) {
     val pal = LocalPal.current
+    var sortMode by rememberSaveable { mutableIntStateOf(0) } // 0默认 1涨幅 2跌幅 3自选
+
     Column(Modifier.fillMaxSize()) {
         TickerTape(stocks = state.stocks, onClick = onOpenDetail)
 
-        // 市场概览
+        // 大盘指数卡
+        IndexCard(state)
+
+        // 排序筛选
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text("市场情绪指数", color = pal.textDim, fontSize = 11.sp)
-                AnimatedNumber(
-                    value = state.marketIndex,
-                    format = { Fmt.pct(it) },
-                    color = if (state.marketIndex > 0) pal.up else if (state.marketIndex < 0) pal.down else pal.text,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            MoodTag(state.mood)
-            if (state.windowActive) {
-                Spacer(Modifier.width(8.dp))
+            val modes = listOf("默认" to 0, "涨幅" to 1, "跌幅" to 2, "自选" to 3)
+            modes.forEach { (label, m) ->
+                val selected = sortMode == m
                 Box(
                     Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(pal.goldDim)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .background(if (selected) pal.gold else pal.surface)
+                        .border(1.dp, if (selected) pal.gold else pal.border, AppShape.Card)
+                        .clickable { sortMode = m }
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                 ) {
-                    Text("⏱ 波动翻倍中", color = pal.gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        label,
+                        color = if (selected) Color(0xFF2B1D00) else pal.textDim,
+                        fontSize = 12.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    )
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            if (state.windowActive) {
+                Row(
+                    Modifier
+                        .background(pal.goldDim)
+                        .border(1.dp, pal.gold, AppShape.Mini)
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AppIcons.Icon(kind = "clock", color = pal.gold, size = 12.dp)
+                    Spacer(Modifier.width(4.dp))
+                    Text("波动翻倍", color = pal.gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
 
-        val unlocked = state.stocks.filter { !it.locked }
+        // 列表数据（排序）
+        val unlockedBase = state.stocks.filter { !it.locked }
+        val unlocked = when (sortMode) {
+            1 -> unlockedBase.sortedByDescending { it.sessionChangePct }
+            2 -> unlockedBase.sortedBy { it.sessionChangePct }
+            3 -> unlockedBase.sortedWith(compareByDescending<StockUi> { it.favorite }.thenByDescending { it.sessionChangePct })
+            else -> unlockedBase
+        }
         val locked = state.stocks.filter { it.locked }.sortedBy { it.def.unlockAt }
 
         LazyColumn(
@@ -109,17 +133,59 @@ fun MarketScreen(
                     onStar = { onToggleFavorite(s.def.id) },
                 )
             }
-            items(locked, key = { "lock_" + it.def.id }) { s ->
-                StockCard(
-                    s = s,
-                    locked = true,
-                    onClick = {},
-                    onStar = {},
-                    maxAssets = state.maxTotalAssets,
-                )
+            if (sortMode != 3) {
+                items(locked, key = { "lock_" + it.def.id }) { s ->
+                    StockCard(
+                        s = s,
+                        locked = true,
+                        onClick = {},
+                        onStar = {},
+                        maxAssets = state.maxTotalAssets,
+                    )
+                }
             }
-            item { Spacer(Modifier.height(90.dp)) }
+            item { Spacer(Modifier.height(12.dp)) }
         }
+    }
+}
+
+/** 大盘指数：数值 + 涨跌 + 迷你走势 */
+@Composable
+private fun IndexCard(state: GameState) {
+    val pal = LocalPal.current
+    val up = state.marketIndex > 1e-9
+    val down = state.marketIndex < -1e-9
+    val color = if (up) pal.up else if (down) pal.down else pal.textDim
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(pal.surface)
+            .border(1.dp, pal.border, AppShape.Card)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.width(96.dp)) {
+            Text("大盘指数", color = pal.textDim, fontSize = 10.sp)
+            AnimatedNumber(
+                value = state.indexValue,
+                format = { String.format(java.util.Locale.CHINA, "%.1f", it) },
+                color = color,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+        Column(Modifier.width(84.dp)) {
+            Text("平均涨跌", color = pal.textDim, fontSize = 10.sp)
+            ChangeText(pct = state.marketIndex, style = MaterialTheme.typography.titleSmall)
+        }
+        Sparkline(
+            data = state.indexHistory.takeLast(240),
+            color = color,
+            modifier = Modifier
+                .weight(1f)
+                .height(40.dp),
+        )
     }
 }
 
@@ -140,8 +206,7 @@ private fun MoodTag(mood: Double) {
     }
     Box(
         Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.12f))
+            .background(color.copy(alpha = 0.12f), AppShape.Mini)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Text("市场 $label", color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -149,11 +214,10 @@ private fun MoodTag(mood: Double) {
 }
 
 /**
- * 股票卡片：
- * - 迷你实时走势图
- * - 涨跌时边框泛红/泛绿
- * - 持仓股金点标记 + 自选星标轻微跳动
- * - 未解锁：锁定占位 + 解锁进度
+ * 股票卡片 v0.2（直角终端风）：
+ * - 迷你实时走势图 + 涨跌边框泛红/泛绿
+ * - 涨跌停 / 委托中 / 事件角标
+ * - 未解锁：锁图标 + 解锁进度
  */
 @Composable
 fun StockCard(
@@ -165,7 +229,6 @@ fun StockCard(
 ) {
     val pal = LocalPal.current
 
-    // 边框颜色：按最新 tick 方向泛红/泛绿；平盘时用中性色
     val borderColor by animateColorAsState(
         targetValue = when {
             locked -> pal.border
@@ -177,7 +240,6 @@ fun StockCard(
         label = "cardBorder",
     )
 
-    // 持仓股 / 自选股：轻微呼吸
     val highlight = !locked && (s.shares > 1e-9 || s.favorite)
     val breathe = rememberInfiniteTransition(label = "breathe" + s.def.id)
     val breatheAlpha by breathe.animateFloat(
@@ -194,39 +256,40 @@ fun StockCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
             .background(if (highlight) pal.surfaceHigh else pal.surface)
-            .border(1.5.dp, borderColor, RoundedCornerShape(14.dp))
+            .border(1.5.dp, borderColor, AppShape.Card)
             .clickable(enabled = !locked) { onClick() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        if (!locked && s.hasEvent) {
-            // 事件角标
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(2.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (s.eventGood) pal.goldDim else pal.downDim)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+        // 右上角标：涨跌停 > 事件 > 委托
+        if (!locked && (s.limitState != 0 || s.hasEvent || s.pendingOrders > 0)) {
+            Row(
+                Modifier.align(Alignment.TopEnd),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    if (s.eventGood) "利好" else "利空",
-                    color = if (s.eventGood) pal.gold else pal.down,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (s.limitState != 0) {
+                    TagBadge(
+                        text = if (s.limitState > 0) "涨停" else "跌停",
+                        color = if (s.limitState > 0) pal.up else pal.down,
+                    )
+                }
+                if (s.hasEvent) {
+                    TagBadge(
+                        text = if (s.eventGood) "利好" else "利空",
+                        color = if (s.eventGood) pal.gold else pal.down,
+                    )
+                }
+                if (s.pendingOrders > 0) {
+                    TagBadge(text = "委托${s.pendingOrders}", color = pal.teal)
+                }
             }
         }
         if (locked) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(pal.surfaceHigh),
+                    Modifier.size(34.dp),
                     contentAlignment = Alignment.Center,
-                ) { Text("🔒", fontSize = 15.sp) }
+                ) { AppIcons.Icon(kind = "lock", color = pal.textDim, size = 20.dp) }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("？？？", color = pal.textDim, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -245,8 +308,7 @@ fun StockCard(
                         trackColor = pal.surfaceHigh,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
+                            .height(4.dp),
                     )
                 }
                 Text(
@@ -266,7 +328,6 @@ fun StockCard(
                             Box(
                                 Modifier
                                     .size(6.dp)
-                                    .clip(CircleShape)
                                     .background(pal.gold.copy(alpha = breatheAlpha + 0.3f)),
                             )
                         }
@@ -278,14 +339,16 @@ fun StockCard(
                     )
                     Spacer(Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (s.favorite) {
-                            Text("★", color = pal.gold, fontSize = 12.sp, modifier = Modifier.clickable { onStar() })
-                        } else {
-                            Text("☆", color = pal.textDim, fontSize = 12.sp, modifier = Modifier.clickable { onStar() })
-                        }
+                        AppIcons.Icon(
+                            kind = "star",
+                            color = if (s.favorite) pal.gold else pal.textDim,
+                            size = 14.dp,
+                            filled = s.favorite,
+                            modifier = Modifier.clickable { onStar() },
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            "日分红 " + String.format(java.util.Locale.CHINA, "%.2f", s.def.divDailyPct) + "%",
+                            "分红 " + String.format(java.util.Locale.CHINA, "%.2f", s.def.divDailyPct) + "%/日",
                             color = pal.teal,
                             fontSize = 10.sp,
                         )
@@ -311,5 +374,17 @@ fun StockCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TagBadge(text: String, color: Color) {
+    val pal = LocalPal.current
+    Box(
+        Modifier
+            .background(color.copy(alpha = 0.14f), AppShape.Mini)
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+    ) {
+        Text(text, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }

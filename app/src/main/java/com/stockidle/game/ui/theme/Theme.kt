@@ -17,6 +17,7 @@ class Pal(
     val surface: Color,
     val surfaceHigh: Color,
     val border: Color,
+    val borderStrong: Color,
     val text: Color,
     val textDim: Color,
     val gold: Color,
@@ -30,14 +31,16 @@ class Pal(
 )
 
 private val darkPal = Pal(
-    bg = DarkBg, surface = DarkSurface, surfaceHigh = DarkSurfaceHigh, border = DarkBorder,
+    bg = DarkBg, surface = DarkSurface, surfaceHigh = DarkSurfaceHigh,
+    border = DarkBorder, borderStrong = Color(0xFF3A4A6B),
     text = DarkText, textDim = DarkTextDim, gold = DarkGold, teal = DarkTeal,
     up = DarkUp, down = DarkDown, upDim = DarkUpDim, downDim = DarkDownDim,
     goldDim = DarkGoldDim, isDark = true,
 )
 
 private val lightPal = Pal(
-    bg = LightBg, surface = LightSurface, surfaceHigh = LightSurfaceHigh, border = LightBorder,
+    bg = LightBg, surface = LightSurface, surfaceHigh = LightSurfaceHigh,
+    border = LightBorder, borderStrong = LightBorderStrong,
     text = LightText, textDim = LightTextDim, gold = LightGold, teal = LightTeal,
     up = LightUp, down = LightDown, upDim = LightUpDim, downDim = LightDownDim,
     goldDim = LightGoldDim, isDark = false,

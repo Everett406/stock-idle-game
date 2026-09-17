@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.stockidle.game.ui.theme.AppShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,7 +89,7 @@ fun BreakingBanner(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(AppShape.Card)
                 .background(barBrush)
                 .background(Color.Transparent)
                 .padding(1.5.dp),
@@ -98,7 +98,7 @@ fun BreakingBanner(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(9.dp))
+                    .clip(AppShape.Card)
                     .background(Color.Black.copy(alpha = 0.0f))
             )
             Row(
@@ -108,10 +108,7 @@ fun BreakingBanner(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "⚡",
-                    fontSize = 18.sp,
-                )
+                AppIcons.Icon(kind = "bolt", color = if (good) Color(0xFFFFE9B0) else Color(0xFFFFC9CE), size = 18.dp, filled = true)
                 Column(
                     Modifier
                         .weight(1f)
@@ -141,13 +138,13 @@ fun BreakingBanner(
             Box(
                 Modifier
                     .matchParentSize()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(AppShape.Card)
                     .background(Color.Transparent)
             )
             Canvas(Modifier.matchParentSize()) {
                 drawRoundRect(
                     color = edge,
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(28f, 28f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f),
                 )
             }
@@ -223,7 +220,7 @@ fun UnlockOverlay(
                     alpha = t
                 },
             ) {
-                Text("🔓", fontSize = 52.sp)
+                AppIcons.Icon(kind = "unlock", color = pal.gold, size = 48.dp)
                 Text(
                     "新股票解锁",
                     color = pal.gold,
@@ -354,7 +351,7 @@ fun PrestigeOverlay(
                     Box(
                         Modifier
                             .size(112.dp, 64.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(AppShape.Card)
                             .background(
                                 Brush.linearGradient(listOf(Color(0xFF8A6A1C), Color(0xFFF5C451), Color(0xFF8A6A1C)))
                             ),
