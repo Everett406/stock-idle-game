@@ -1,0 +1,85 @@
+name: Release
+
+# 推送 v* 标签时自动：校验版本一致性 → 解密签名密钥 → 构建签名 APK → 创建 Release
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Verify version consistency (tag == version.txt)
+        run: |
+          V=$(tr -d '[:space:]' < version.txt)
+          TAG="${GITHUB_REF_NAME}"
+          echo "version.txt=$V  tag=$TAG"
+          if [ "v$V" != "$TAG" ]; then
+            echo "::error::版本不一致：tag($TAG) 与 version.txt(v$V) 不匹配"
+            exit 1
+          fi
+
+      - name: Decode signing key from secrets
+        run: |
+          echo "${{ secrets.SIGNING_KEY }}" | base64 -d > "${{ github.workspace }}/release.keystore"
+          test -s "${{ github.workspace }}/release.keystore" || { echo "::error::签名密钥解码失败"; exit 1; }
+
+      - name: Build signed release APK
+        env:
+          SIGNING_KEY_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          V=$(tr -d '[:space:]' < version.txt)
+          awk -v ver="## v$V" '
+            index($0, ver) == 1 { flag = 1; next }
+            /^## / { if (flag) exit }
+            flag { print }
+          ' CHANGELOG.md > release_notes.md
+          # 兜底：说明为空时给出默认文案
+          if [ ! -s release_notes.md ]; then
+            echo "StockIdle v$V 发布。" > release_notes.md
+          fi
+          cat release_notes.md
+
+      - name: Compute version
+        id: vars
+        run: |
+          V=$(tr -d '[:space:]' < version.txt)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Rename APK
+        run: |
+          V=$(tr -d '[:space:]' < version.txt)
+          cp app/build/outputs/apk/release/app-release.apk "StockIdle-v$V.apk"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 股海拾金 v${{ steps.vars.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: StockIdle-v*.apk

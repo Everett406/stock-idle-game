@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图标：深蓝底 + 金色三根K线 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 上升趋势线 -->
+    <path
+        android:pathData="M30,72 L46,60 L62,50 L78,36"
+        android:strokeColor="#F5C451"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+
+    <!-- K线 1（涨，红） -->
+    <path
+        android:pathData="M34,64 h8 v14 h-8 z"
+        android:fillColor="#F6465D"/>
+    <path
+        android:pathData="M38,58 v6 M38,78 v6"
+        android:strokeColor="#F6465D"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"/>
+
+    <!-- K线 2（涨，红） -->
+    <path
+        android:pathData="M50,52 h8 v16 h-8 z"
+        android:fillColor="#F6465D"/>
+    <path
+        android:pathData="M54,46 v6 M54,68 v6"
+        android:strokeColor="#F6465D"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"/>
+
+    <!-- K线 3（涨，红，大阳线） -->
+    <path
+        android:pathData="M66,42 h8 v18 h-8 z"
+        android:fillColor="#F6465D"/>
+    <path
+        android:pathData="M70,36 v6 M70,60 v8"
+        android:strokeColor="#F6465D"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"/>
+
+    <!-- 金币点缀 -->
+    <path
+        android:pathData="M78,72 m-6,0 a6,6 0 1,1 12,0 a6,6 0 1,1 -12,0"
+        android:fillColor="#F5C451"/>
+    <path
+        android:pathData="M78,67.5 m-2.2,0 a2.2,2.2 0 1,1 4.4,0 a2.2,2.2 0 1,1 -4.4,0"
+        android:fillColor="#FFF3D0"/>
+</vector>
