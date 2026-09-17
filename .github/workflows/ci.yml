@@ -19,8 +19,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # Runner 自带 Android SDK（ANDROID_HOME 已预置，许可证已接受）；
+      # 若缺组件由 AGP 自动下载，此处仅兜底确认许可证
+      - name: Ensure Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
       - name: Build debug APK
         run: |
